@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SF Home Size vs Price</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #7a7974;
+  --grid: #e6e5e0;
+  --axis: #b9b8b2;
+  --tip-bg: #ffffff;
+  --tip-border: #dcdbd5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8f8e86;
+    --grid: #2c2c2a;
+    --axis: #4a4a46;
+    --tip-bg: #262624;
+    --tip-border: #3a3a37;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #8f8e86;
+  --grid: #2c2c2a;
+  --axis: #4a4a46;
+  --tip-bg: #262624;
+  --tip-border: #3a3a37;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--surface-1); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 960px; margin: 0 auto; padding: 32px 16px 48px; }
+h1 { font-size: 22px; margin: 0 0 4px; font-weight: 600; }
+.sub { color: var(--text-secondary); margin: 0 0 20px; }
+.legend { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.legend .bar { width: 200px; height: 10px; border-radius: 5px; }
+.chart { position: relative; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+.grid line { stroke: var(--grid); }
+.axis text { fill: var(--text-muted); font-size: 11px; }
+.axis-title { fill: var(--text-secondary); font-size: 12px; }
+.dot { stroke: var(--surface-1); stroke-width: 2; }
+.dot.active { stroke: var(--text-primary); }
+.tip {
+  position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
+  background: var(--tip-bg); border: 1px solid var(--tip-border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,.12);
+}
+.tip b { font-weight: 600; }
+.tip .muted { color: var(--text-secondary); }
+.note { color: var(--text-muted); font-size: 12px; margin-top: 16px; }
+.note a { color: inherit; }
+details { margin-top: 20px; }
+summary { cursor: pointer; color: var(--text-secondary); }
+.tbl { max-height: 320px; overflow: auto; margin-top: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--grid); }
+th { position: sticky; top: 0; background: var(--surface-1); color: var(--text-secondary); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>San Francisco homes: size vs. price per sq ft</h1>
+  <p class="sub">268 listings · color shows year built</p>
+  <div class="legend">
+    <span id="lgMin"></span><span class="bar" id="lgBar"></span><span id="lgMax"></span>
+    <span>year built</span>
+  </div>
+  <div class="chart" id="chart">
+    <svg id="svg" role="img" aria-label="Scatter plot of home size in square feet against price per square foot for San Francisco homes, colored by year built"></svg>
+    <div class="tip" id="tip"></div>
+  </div>
+  <details>
+    <summary>View data table</summary>
+    <div class="tbl"><table id="tbl"><thead><tr><th>Sq ft</th><th>$/sq ft</th><th>Year built</th><th>Price</th><th>Beds</th><th>Baths</th></tr></thead><tbody></tbody></table></div>
+  </details>
+  <p class="note">Data: <a href="https://github.com/jadeyee/r2d3-part-1-data">R2D3 “A Visual Introduction to Machine Learning” housing dataset</a> (CC BY-NC-SA 4.0), San Francisco subset. The dataset authors note it was collected for teaching, not for drawing conclusions about the real-estate market. X axis is log scale.</p>
+</main>
+<script>
+const DATA = [[724,760,1982,550000,1,1.0],[1030,824,1982,849000,2,2.0],[2950,593,1900,1750000,3,2.0],[847,943,2008,799000,1,1.0],[1453,619,1997,899000,1,1.5],[534,1120,2005,598000,1,1.0],[1086,1002,1998,1088000,1,2.0],[769,1038,1926,798000,1,1.0],[769,1038,1926,798000,1,1.0],[2275,657,1927,1495000,1,1.0],[3321,1295,2006,4300000,4,4.0],[756,925,2008,699000,1,1.0],[1047,320,2000,334905,2,2.0],[1127,753,1996,849000,1,1.5],[1607,849,1996,1365000,1,1.5],[674,963,2011,649000,1,1.0],[1503,828,1907,1245000,3,3.0],[850,764,1983,649000,1,1.0],[1250,1360,1987,1700000,2,2.0],[1469,1348,2009,1980000,2,2.0],[1652,2179,2009,3600000,2,2.0],[2230,2240,2009,4995000,2,3.0],[1159,1120,2008,1298000,2,2.0],[1317,1632,2008,2149000,2,2.0],[1362,1465,2006,1995000,3,2.0],[1640,1006,1937,1650000,2,2.0],[824,1152,2010,949000,1,1.0],[670,280,2000,187518,1,1.0],[2354,847,2008,1995000,3,2.5],[2354,847,2008,1995000,3,2.5],[1328,2108,2008,2799000,2,2.0],[1640,640,2000,1050000,2,2.5],[1113,804,2006,895000,2,2.0],[872,1144,2006,998000,1,1.0],[1165,1424,2000,1659000,2,2.0],[903,873,2004,788000,1,1.0],[1334,1046,2001,1395000,2,2.0],[1453,894,2004,1299000,2,2.0],[1136,748,2000,850000,2,2.5],[2075,1373,2013,2850000,3,2.5],[1258,755,2000,950000,2,2.0],[1173,1364,2002,1600000,2,2.0],[1502,849,2001,1275000,3,2.0],[835,928,2009,775000,1,1.5],[1809,773,1892,1399000,3,2.0],[950,925,1912,879000,2,2.0],[932,750,1907,699000,1,1.0],[884,1114,1978,985000,1,1.0],[1063,682,1978,725000,1,1.0],[1100,772,1911,849000,2,2.0],[705,877,1973,618000,1,1.0],[3700,1608,1989,5950000,2,2.0],[2475,727,1948,1800000,4,4.0],[1314,1788,2008,2350000,2,2.5],[989,748,1920,740200,1,1.0],[780,896,1982,699000,1,1.0],[915,1047,2005,958000,2,2.0],[1302,922,1909,1200000,2,2.0],[2233,705,1993,1575000,3,3.0],[1100,1090,1964,1199000,2,2.0],[791,669,1966,529000,1,1.0],[880,794,1984,699000,1,1.0],[1675,773,1926,1295000,3,2.0],[2347,767,1948,1800000,4,4.0],[990,803,2000,795000,1,1.0],[808,964,2007,779000,2,2.0],[1000,379,2000,378551,1,1.5],[2492,561,1904,1398000,4,2.3],[1493,735,1904,1097000,2,1.3],[507,1321,2014,670000,1,1.0],[943,1271,2014,1199000,2,2.0],[1135,965,2010,1095000,2,2.0],[616,1291,2014,795000,1,2.0],[1440,680,1900,979000,3,2.0],[2100,709,1977,1488888,3,3.0],[1546,898,1908,1389000,3,2.0],[1546,898,1908,1389000,3,2.0],[1267,867,1962,1099000,4,2.0],[2449,735,1900,1799000,3,3.5],[1450,862,1924,1250000,3,2.0],[1464,682,1907,998000,3,2.0],[1642,792,1975,1300000,3,2.5],[709,760,2000,539000,1,1.0],[779,944,1983,735000,1,1.0],[1441,477,1942,688000,3,2.0],[1100,781,1890,859000,2,1.0],[1250,559,1964,699000,3,2.0],[980,765,1924,750000,2,1.0],[1972,278,1915,549000,3,2.0],[2567,623,1926,1600000,6,3.0],[1700,515,1909,875000,2,2.0],[1870,481,2003,900000,4,3.0],[1522,491,1930,748000,3,2.0],[1348,556,1949,749000,2,1.5],[707,847,1942,599000,2,1.0],[1325,490,1940,648800,3,1.0],[1320,492,1924,649000,2,2.0],[1025,779,1929,798888,2,1.0],[1940,463,1972,899000,5,2.0],[1625,430,1910,699000,3,1.5],[1513,495,1907,749000,3,2.0],[1824,293,1967,535000,3,2.0],[900,777,1913,699000,2,1.0],[900,777,1913,699000,2,1.0],[1166,429,1958,500000,2,1.0],[2111,416,1981,879000,3,2.5],[2111,416,1981,879000,3,2.5],[1752,399,1982,699900,4,2.5],[1145,601,1950,688000,2,1.0],[1396,856,1907,1195000,3,2.0],[1396,856,1907,1195000,3,2.0],[694,1004,1922,697000,1,1.0],[3350,1193,1905,3995000,5,3.5],[600,1083,1955,650000,1,1.0],[600,1083,1955,650000,1,1.0],[600,1292,1955,775000,1,1.0],[600,1375,1955,825000,1,1.0],[915,764,1907,699000,2,1.0],[1520,984,1927,1495000,3,2.0],[4813,1080,1952,5200000,4,4.5],[988,1001,1984,989000,2,2.0],[1465,747,1895,1095000,3,1.0],[811,894,1900,725000,1,1.0],[811,894,1900,725000,1,1.0],[3816,694,1900,2650000,4,4.0],[1850,908,1962,1680000,2,2.0],[1139,1053,1906,1199000,1,1.0],[1400,571,1947,799000,3,2.5],[1350,589,1954,795000,3,2.0],[995,703,1944,699000,2,1.0],[1500,565,1940,848000,3,2.0],[1665,540,1948,899000,3,2.0],[1665,540,1948,899000,3,2.0],[1965,610,1937,1198000,6,4.0],[2633,418,1925,1100000,3,3.0],[2473,384,1918,949000,6,3.5],[5000,598,2014,2990000,5,5.0],[2330,575,1940,1338800,4,3.0],[1905,729,1928,1388000,3,2.5],[1603,617,1940,989000,3,2.0],[1772,731,1890,1295000,3,1.0],[7800,884,1902,6895000,6,6.0],[1415,1219,1922,1725000,2,2.0],[1915,1042,1922,1995000,3,3.0],[510,978,1900,499000,0,1.0],[510,978,1900,499000,0,1.0],[624,960,1900,599000,1,1.0],[624,960,1900,599000,1,1.0],[1284,935,1929,1200000,3,2.0],[1877,743,1909,1395000,3,2.0],[1970,906,1925,1785000,3,3.0],[1457,754,1905,1099000,3,2.0],[4310,811,1921,3495000,5,5.5],[2323,1031,1929,2395000,3,2.0],[2746,928,1907,2549000,4,2.5],[1393,714,2000,995000,3,2.0],[4609,1409,1906,6495000,5,3.5],[1789,949,1890,1698000,4,3.0],[3585,1757,1914,6298000,5,2.0],[1532,743,2008,1139000,3,3.0],[1954,553,1914,1080000,3,2.0],[1767,594,1932,1050000,4,1.0],[875,846,1941,739900,1,1.0],[2750,580,1925,1595000,4,4.0],[1200,583,1907,699000,2,1.0],[1150,695,1938,799000,2,1.0],[2180,456,1915,995000,4,2.5],[1145,724,1925,829000,2,1.0],[1158,756,1908,875000,2,1.0],[1846,515,1939,950000,5,3.0],[1450,517,1936,749000,2,1.0],[1450,517,1936,749000,2,1.0],[5420,1753,1937,9500000,6,6.5],[3017,1192,1931,3595000,4,3.0],[1360,1048,1925,1425000,2,1.5],[960,901,1993,865000,1,1.0],[1809,1379,1940,2495000,2,2.5],[1518,1318,1925,2000000,2,2.0],[6024,1643,2008,9895000,4,3.5],[1325,270,1989,358000,3,2.0],[1391,646,2015,899000,3,2.5],[1391,668,2015,929000,3,2.5],[2470,344,1928,850000,4,4.0],[1125,576,1921,648000,2,1.0],[680,706,1915,480000,2,1.0],[1076,464,1900,499000,1,1.0],[1473,468,1951,689000,4,2.0],[1317,508,1986,669000,2,2.0],[1012,720,1942,729000,2,1.5],[1380,556,1916,767000,2,2.0],[1520,434,1900,660000,3,1.0],[600,1658,1908,995000,2,1.0],[1175,647,1941,759900,2,1.0],[3080,323,2001,995000,6,3.5],[1040,697,1945,725000,2,1.0],[5113,669,1926,3420000,4,3.0],[2025,815,1922,1650000,3,2.0],[3258,691,1928,2250000,3,3.5],[1752,753,1925,1319000,3,1.0],[2769,613,1966,1698000,5,3.5],[1626,645,1947,1049000,3,2.0],[862,695,1990,599000,2,2.0],[3890,770,1947,2995000,5,3.5],[1305,762,1956,995000,3,2.0],[600,583,1908,350000,1,1.0],[800,688,1908,550000,2,1.0],[3085,1219,1900,3760000,4,4.0],[1266,829,1922,1050000,3,2.0],[1756,1079,1907,1895000,2,2.0],[680,881,1961,599000,1,1.0],[2041,928,2001,1895000,4,3.0],[1800,999,1926,1799000,3,2.0],[1350,444,1908,600000,2,1.0],[1700,879,1908,1495000,2,1.0],[1515,1053,1961,1595000,3,2.0],[1622,523,1947,849000,3,2.0],[3312,602,1992,1995000,4,3.5],[1635,914,1937,1495000,3,2.0],[2168,1012,1922,2195000,3,3.5],[2050,877,1951,1798000,4,2.0],[1555,546,1978,849000,2,2.0],[1731,670,1977,1159000,3,2.0],[1959,508,1976,995000,3,2.5],[2275,610,1968,1388000,4,3.0],[3729,603,1962,2250000,5,3.5],[1524,709,1989,1080000,3,2.0],[1868,586,1968,1095000,3,2.5],[990,605,1972,599000,2,1.0],[1251,731,1954,915000,2,1.0],[1251,731,1954,915000,2,1.0],[1474,492,1975,725000,3,2.0],[2001,794,2015,1588000,3,2.5],[1256,633,1941,795000,2,1.0],[1256,633,1941,795000,2,1.0],[1646,515,1949,848000,4,2.0],[667,658,2002,439000,1,1.0],[1310,649,1958,849900,3,2.0],[1254,478,1941,599000,2,1.0],[2024,761,2014,1539514,3,2.5],[2133,628,2015,1339000,3,2.5],[2133,607,2015,1294000,3,2.5],[2001,805,2015,1611000,3,2.5],[1174,1273,1913,1495000,2,2.0],[750,932,1908,699000,1,1.0],[1968,1776,1900,3495000,2,2.5],[1550,451,1949,699000,4,2.0],[1050,666,1949,699000,2,1.0],[1555,571,1975,888000,3,3.0],[631,949,1945,599000,1,1.0],[2157,351,1989,758000,3,3.0],[1620,1048,2008,1698000,2,2.0],[1620,1048,2008,1698000,2,2.0],[886,958,2012,849000,1,1.0],[1562,1072,2012,1675000,2,2.0],[1610,1053,2007,1695000,2,2.0],[1921,1155,2012,2219000,3,2.0],[903,873,2004,788000,1,1.0],[1930,1010,1995,1950000,2,2.0],[709,760,2000,539000,0,1.0],[1030,824,1982,849000,2,2.0],[1809,1379,1940,2495000,2,2.5],[3085,1219,1894,3760000,4,4.0],[1800,999,1926,1799000,3,2.0],[3073,586,1890,1800000,5,2.5],[1045,665,1923,695000,2,1.0],[1483,1113,1922,1650000,3,2.0],[850,764,1983,649000,1,1.0],[1305,762,1956,995000,3,2.0]]; // [sqft, price_per_sqft, year_built, price, beds, baths]
+const NS = "http://www.w3.org/2000/svg";
+const W = 900, H = 540, M = { t: 12, r: 16, b: 52, l: 64 };
+const pw = W - M.l - M.r, ph = H - M.t - M.b;
+const X0 = 400, X1 = 10000, Y0 = 0, Y1 = 2400;
+const YR0 = 1890, YR1 = 2015;
+const x = v => M.l + (Math.log(v) - Math.log(X0)) / (Math.log(X1) - Math.log(X0)) * pw;
+const y = v => M.t + ph - (v - Y0) / (Y1 - Y0) * ph;
+
+// Sequential blue ramp: older = lighter, newer = darker (reversed on dark surface)
+const RAMP_LIGHT = ["#86b6ef","#5598e7","#2a78d6","#1c5cab","#104281","#0d366b"];
+const RAMP_DARK  = ["#184f95","#1c5cab","#256abf","#3987e5","#6da7ec","#9ec5f4"];
+const hex = h => [1,3,5].map(i => parseInt(h.slice(i, i + 2), 16));
+function rampColor(ramp, t) {
+  const s = Math.max(0, Math.min(1, t)) * (ramp.length - 1), i = Math.min(ramp.length - 2, Math.floor(s)), f = s - i;
+  const a = hex(ramp[i]), b = hex(ramp[i + 1]);
+  return "rgb(" + a.map((c, k) => Math.round(c + (b[k] - c) * f)).join(",") + ")";
+}
+const isDark = () => {
+  const th = document.documentElement.dataset.theme;
+  return th ? th === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+};
+
+const svg = document.getElementById("svg");
+svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+
+const grid = el("g", { class: "grid" }, svg), axis = el("g", { class: "axis" }, svg);
+[500, 1000, 2000, 4000, 8000].forEach(v => {
+  el("line", { x1: x(v), x2: x(v), y1: M.t, y2: M.t + ph }, grid);
+  el("text", { x: x(v), y: M.t + ph + 18, "text-anchor": "middle" }, axis).textContent = v.toLocaleString();
+});
+for (let v = 0; v <= Y1; v += 400) {
+  el("line", { x1: M.l, x2: M.l + pw, y1: y(v), y2: y(v) }, grid);
+  el("text", { x: M.l - 8, y: y(v) + 4, "text-anchor": "end" }, axis).textContent = "$" + v.toLocaleString();
+}
+el("text", { class: "axis-title", x: M.l + pw / 2, y: H - 8, "text-anchor": "middle" }, svg).textContent = "Home size (sq ft, log scale)";
+el("text", { class: "axis-title", transform: `translate(14 ${M.t + ph / 2}) rotate(-90)`, "text-anchor": "middle" }, svg).textContent = "Price per sq ft";
+
+const dots = el("g", {}, svg);
+// draw older first so newer homes sit on top
+const sorted = DATA.map((d, i) => [d, i]).sort((a, b) => a[0][2] - b[0][2]);
+const nodes = sorted.map(([d]) => {
+  const c = el("circle", { class: "dot", cx: x(d[0]), cy: y(d[1]), r: 5.5 }, dots);
+  c.__d = d; return c;
+});
+function paint() {
+  const ramp = isDark() ? RAMP_DARK : RAMP_LIGHT;
+  nodes.forEach(c => c.setAttribute("fill", rampColor(ramp, (c.__d[2] - YR0) / (YR1 - YR0))));
+  document.getElementById("lgBar").style.background = "linear-gradient(to right," + ramp.join(",") + ")";
+}
+document.getElementById("lgMin").textContent = YR0;
+document.getElementById("lgMax").textContent = YR1;
+paint();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paint);
+new MutationObserver(paint).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+// Hover: nearest point within 24px
+const tip = document.getElementById("tip"), chart = document.getElementById("chart");
+let active = null;
+const usd = v => "$" + v.toLocaleString();
+function onMove(ev) {
+  const r = svg.getBoundingClientRect(), k = W / r.width;
+  const px = (ev.clientX - r.left) * k, py = (ev.clientY - r.top) * k;
+  let best = null, bd = (24 * k) ** 2;
+  for (const c of nodes) { const dx = c.cx.baseVal.value - px, dy = c.cy.baseVal.value - py, dd = dx * dx + dy * dy; if (dd < bd) { bd = dd; best = c; } }
+  if (active && active !== best) active.classList.remove("active");
+  active = best;
+  if (!best) { tip.style.opacity = 0; return; }
+  best.classList.add("active"); dots.appendChild(best);
+  const d = best.__d;
+  tip.innerHTML = `<b>${usd(d[1])}/sq ft</b><br>${d[0].toLocaleString()} sq ft · built ${d[2]}<br><span class="muted">${usd(d[3])} · ${d[4]} bd / ${d[5]} ba</span>`;
+  const cr = chart.getBoundingClientRect();
+  let tx = best.cx.baseVal.value / k + 14, ty = best.cy.baseVal.value / k - 14;
+  tip.style.opacity = 1;
+  if (tx + tip.offsetWidth > cr.width) tx = best.cx.baseVal.value / k - tip.offsetWidth - 14;
+  if (ty < 0) ty = 0;
+  tip.style.left = tx + "px"; tip.style.top = ty + "px";
+}
+svg.addEventListener("pointermove", onMove);
+svg.addEventListener("pointerleave", () => { tip.style.opacity = 0; if (active) active.classList.remove("active"); active = null; });
+
+const tb = document.querySelector("#tbl tbody");
+[...DATA].sort((a, b) => a[0] - b[0]).forEach(d => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${d[0].toLocaleString()}</td><td>${usd(d[1])}</td><td>${d[2]}</td><td>${usd(d[3])}</td><td>${d[4]}</td><td>${d[5]}</td>`;
+  tb.appendChild(tr);
+});
+</script>
+</body>
+</html>
